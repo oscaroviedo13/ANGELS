@@ -64,7 +64,8 @@ async function enviarAKobo(env, xml) {
   const fd = new FormData();
   fd.append('xml_submission_file', new Blob([xml], { type: 'text/xml' }), 'envio.xml');
   const r = await fetch(env.KOBO_SUBMIT, { method: 'POST', headers: { 'X-OpenRosa-Version': '1.0' }, body: fd });
-  return r.status;                   // 201 creado · 202 aceptado · 409 duplicado (ya estaba)
+  let body = ''; try { body = (await r.text()).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300); } catch (e) {}
+  return { status: r.status, body: body };   // 201 creado · 202 aceptado · 409 duplicado (ya estaba)
 }
 
 export default {
@@ -83,15 +84,22 @@ export default {
       if (!env.CLAVE || !env.KOBO_SUBMIT || !env.FORM_ID) return json({ ok: false, error: 'Faltan variables en el Worker' });
       const body = JSON.parse(await req.text());
       if (body.key !== env.CLAVE) return json({ ok: false, error: 'clave' });
+      if (body.action === 'test') {
+        const rs = await enviarAKobo(env, aXml(env.FORM_ID, { tipo: 'prueba', registrado_en: new Date().toISOString() }, crypto.randomUUID()));
+        const hint = rs.status === 404 ? 'Revisa KOBO_SUBMIT (usuario/servidor) y que el formulario esté implementado.' :
+          (rs.status === 401 || rs.status === 403) ? 'Activa "Permitir envíos anónimos" en Kobo.' :
+          rs.status === 400 ? 'El form_id o los campos no coinciden con el XLSForm.' : '';
+        return json({ ok: true, status: rs.status, body: rs.body, hint: hint });
+      }
       if (body.action !== 'ops') return json({ ok: false, error: 'Acción no válida' });
       const ops = (body.ops || []).slice(0, 40);
       const done = [], failed = [];
       for (const o of ops) {
         const campos = aCampos(o);
         if (!campos || !o.uid) { if (o.uid) done.push(o.uid); continue; }   // operación inválida: se descarta
-        let st = 0;
-        try { st = await enviarAKobo(env, aXml(env.FORM_ID, campos, uuidDe(o.uid))); } catch (e) { st = 0; }
-        if (st === 201 || st === 202 || st === 409) done.push(o.uid); else failed.push({ uid: o.uid, status: st });
+        let rs = { status: 0, body: '' };
+        try { rs = await enviarAKobo(env, aXml(env.FORM_ID, campos, uuidDe(o.uid))); } catch (e) { rs = { status: 0, body: String(e) }; }
+        if (rs.status === 201 || rs.status === 202 || rs.status === 409) done.push(o.uid); else failed.push({ uid: o.uid, status: rs.status, body: rs.body });
       }
       return json({ ok: true, done: done, failed: failed });
     } catch (err) {

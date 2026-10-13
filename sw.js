@@ -1,7 +1,7 @@
 /* Service worker – Club Angels Gymnastics
    Estrategia: red primero (para recibir actualizaciones) y caché como respaldo sin conexión.
    Las llamadas al intermediario (Worker) NO se interceptan. */
-const CACHE = 'angels-v2';
+const CACHE = 'angels-v3';
 const ASSETS = [
   './',
   './index.html',

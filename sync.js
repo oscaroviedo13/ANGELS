@@ -7,7 +7,17 @@
   'use strict';
 
   var CFG = window.ANGELS_CONFIG || {};
-  var K_KEY = 'angels_key', K_QUEUE = 'angels_queue', K_SNAP = 'angels_snap';
+  var K_KEY = 'angels_key', K_QUEUE = 'angels_queue', K_SNAP = 'angels_snap', K_LOG = 'angels_log', K_MODE = 'angels_mode';
+  var MODE = 'kobo-1';
+
+  /* Migración única: restos de la versión anterior (Google Sheets) -> se descartan clave, cola y copia sincronizada,
+     así los datos que ya están en el celular se reenvían a Kobo y la clave vieja no se reutiliza. */
+  try {
+    if (localStorage.getItem(K_MODE) !== MODE) {
+      localStorage.removeItem(K_KEY); localStorage.removeItem(K_QUEUE); localStorage.removeItem(K_SNAP); localStorage.removeItem(K_LOG);
+      localStorage.setItem(K_MODE, MODE);
+    }
+  } catch (e) {}
 
   var queue = readJSON(K_QUEUE, []);
   var snap = readJSON(K_SNAP, null);
@@ -16,6 +26,11 @@
 
   function readJSON(k, d) { try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } }
   function writeJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function logEv(msg, ok) {
+    var l = readJSON(K_LOG, []);
+    l.push({ t: new Date().toISOString(), m: String(msg), ok: ok !== false });
+    writeJSON(K_LOG, l.slice(-60));
+  }
   function getKey() { return localStorage.getItem(K_KEY) || ''; }
   function urlOk() { return CFG.API_URL && /^https:\/\/[^\s]+$/.test(CFG.API_URL); }
   function configured() { return urlOk() && !!getKey(); }
@@ -80,7 +95,12 @@
       var before = queue.length;
       queue = queue.filter(function (o) { return !done[o.uid]; });
       writeJSON(K_QUEUE, queue);
-      if (queue.length === before) throw new Error('Kobo no aceptó los registros');
+      var fails = r.failed || [];
+      logEv('Enviados ' + (before - queue.length) + ' de ' + batch.length + (fails.length ? ' · fallaron ' + fails.length + ' (Kobo ' + (fails[0].status || 'sin respuesta') + ': ' + String(fails[0].body || '').slice(0, 160) + ')' : ''), !fails.length);
+      if (queue.length === before) {
+        var f = fails[0] || {};
+        throw new Error('Kobo respondió ' + (f.status || 'sin respuesta') + (f.status === 404 ? ' (revisa KOBO_SUBMIT y que el formulario esté implementado)' : f.status === 401 || f.status === 403 ? ' (activa Permitir envíos anónimos en Kobo)' : f.status === 400 ? ' (campos del formulario no coinciden)' : ''));
+      }
       if (queue.length) return flush();
     });
   }
@@ -93,8 +113,11 @@
     if (!snap) queueDiff(); // primera conexión: envía lo que ya existía en este dispositivo
     return flush().then(function () { setStatus('ok'); })
       .catch(function (e) {
-        if (e && e.code === 'clave') { localStorage.removeItem(K_KEY); setStatus('nokey'); openConn('La clave no es correcta. Escríbela de nuevo.'); }
-        else setStatus('error', e);
+        if (e && e.code === 'clave') { logEv('Clave incorrecta', false); localStorage.removeItem(K_KEY); setStatus('nokey'); openConn('La clave no es correcta. Escríbela de nuevo.'); }
+        else {
+          var m = (e && e.name === 'TypeError') ? 'No se pudo contactar al Worker (revisa la URL en config.js o tu conexión)' : (e && e.message) || 'Error';
+          logEv(m, false); setStatus('error', new Error(m));
+        }
       })
       .then(function () { busy = false; });
   }
@@ -108,14 +131,17 @@
     sync();
   };
 
+  function wipeAll() {
+    ['angelsGymnastics_v1', K_KEY, K_QUEUE, K_SNAP, K_LOG, K_MODE].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
+    var tareas = [];
+    if (window.caches) tareas.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }));
+    if (navigator.serviceWorker) tareas.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }));
+    return Promise.all(tareas).catch(function () {}).then(function () { location.reload(); });
+  }
   clearAll = function () {
-    if (!confirm('Se borrará la copia guardada en este dispositivo y la app quedará vacía aquí. Los datos ya enviados siguen en Kobo, pero la app NO los vuelve a descargar. ¿Continuar?')) return;
-    if (queue.length && !confirm('Hay ' + queue.length + ' cambios sin enviar a Kobo que se perderían. ¿Continuar de todos modos?')) return;
-    data = { athletes: [], payments: [], attendance: [] };
-    writeJSON(KEY, data);
-    queue = []; writeJSON(K_QUEUE, queue);
-    snap = null; localStorage.removeItem(K_SNAP);
-    renderAll(); toast('Copia local borrada');
+    var pend = queue.length;
+    if (!confirm('Se borrará TODO en este dispositivo: registros, cola de envío, clave y archivos guardados. Los datos ya enviados siguen en Kobo, pero la app NO los vuelve a descargar.' + (pend ? '\n\n⚠ Hay ' + pend + ' cambios SIN ENVIAR a Kobo que se perderían.' : '') + '\n\n¿Continuar?')) return;
+    wipeAll();
   };
 
   importData = function (e) { if (e && e.target) e.target.value = ''; alert('La importación está desactivada: los datos se envían a KoboToolbox.'); };
@@ -134,6 +160,7 @@
     el.textContent = l[0] + (s === 'pending' || s === 'offline' || s === 'error' ? n : '');
     el.style.color = l[1];
     el.title = err && err.message ? err.message : '';
+    if (err && err.message) el.textContent += ' — ' + err.message;
   }
 
   function buildUI() {
@@ -143,13 +170,47 @@
       '<div class="actions" style="margin-top:6px;justify-content:flex-end">' +
       '<button class="gold" id="btnSync" type="button" style="padding:7px 10px;font-size:12px">Enviar a Kobo</button>' +
       '<button class="ghost" id="btnConn" type="button" style="padding:7px 10px;font-size:12px">Conexión</button>' +
+      '<button class="ghost" id="btnLog" type="button" style="padding:7px 10px;font-size:12px">Seguimiento</button>' +
       '<button class="gold hidden" id="btnInstall" type="button" style="padding:7px 10px;font-size:12px">Instalar app</button></div>';
     document.getElementById('btnSync').onclick = function () { sync(true); };
     document.getElementById('btnConn').onclick = function () { openConn(); };
+    document.getElementById('btnLog').onclick = function () { openLog(); };
     document.getElementById('btnInstall').onclick = function () {
       if (!deferredInstall) return;
       deferredInstall.prompt();
       deferredInstall.userChoice.then(function () { deferredInstall = null; document.getElementById('btnInstall').classList.add('hidden'); });
+    };
+  }
+
+  function escH(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+  function openLog(result) {
+    var l = readJSON(K_LOG, []).slice().reverse();
+    var rows = l.length ? l.map(function (x) {
+      var d = new Date(x.t);
+      return '<div style="padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;color:' + (x.ok ? 'inherit' : 'var(--red)') + '">' +
+        '<b>' + d.toLocaleString('es-CO') + '</b><br>' + escH(x.m) + '</div>';
+    }).join('') : '<p class="muted">Aún no hay intentos de envío.</p>';
+    var html = '<p><b>Cola pendiente:</b> ' + queue.length + ' · <b>Conectado:</b> ' + (configured() ? 'sí' : 'no') + ' · <b>Versión:</b> ' + MODE + '</p>' +
+      '<p class="muted" style="word-break:break-all"><b>Worker:</b> ' + escH(CFG.API_URL || '(sin configurar)') + '</p>' +
+      (result ? '<p style="font-weight:700;color:' + (result.ok ? 'var(--green,#1b7a4b)' : 'var(--red)') + '">' + escH(result.msg) + '</p>' : '') +
+      '<div class="actions"><button class="primary" id="logTest" type="button">Probar conexión con Kobo</button>' +
+      '<button class="ghost" id="logSend" type="button">Reintentar envío</button>' +
+      '<button class="danger" id="logWipe" type="button">Borrar todo en este dispositivo</button></div>' +
+      '<div style="margin-top:12px;max-height:45vh;overflow:auto">' + rows + '</div>';
+    openModal('Seguimiento de envíos', html);
+    document.getElementById('logSend').onclick = function () { closeModal(); sync(true).then(function () { openLog(); }); };
+    document.getElementById('logWipe').onclick = function () { closeModal(); clearAll(); };
+    document.getElementById('logTest').onclick = function () {
+      if (!configured()) { closeModal(); openConn(); return; }
+      this.disabled = true; this.textContent = 'Probando…';
+      call({ action: 'test' }).then(function (r) {
+        var ok = r.status === 201 || r.status === 202 || r.status === 409;
+        logEv('Prueba: Kobo respondió ' + r.status + (r.body ? ' · ' + String(r.body).slice(0, 160) : ''), ok);
+        openLog({ ok: ok, msg: ok ? '✔ Kobo recibió el envío de prueba (código ' + r.status + '). Búscalo en Datos con tipo = prueba.' : '✖ Kobo respondió ' + r.status + '. ' + (r.hint || '') });
+      }).catch(function (e) {
+        var m = e.code === 'clave' ? 'Clave incorrecta' : (e.name === 'TypeError' ? 'No se pudo contactar al Worker (URL o conexión)' : e.message);
+        logEv('Prueba falló: ' + m, false); openLog({ ok: false, msg: '✖ ' + m });
+      });
     };
   }
 
