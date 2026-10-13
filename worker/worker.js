@@ -12,6 +12,7 @@
  *   FORM_ID       (Texto)   angels_registros
  *   ALLOWED_ORIGIN(Texto)   https://oscaroviedo13.github.io
  */
+const WORKER_VERSION = '1.3.1';
 const ATLETA = ['id', 'createdAt', 'name', 'birth', 'document', 'age', 'sex', 'blood', 'rh', 'height', 'weight', 'eps',
   'address', 'neighborhood', 'school', 'grade', 'guardian1', 'phone1', 'guardian2', 'phone2', 'modality', 'site',
   'days', 'schedule', 'level', 'coach', 'entryDate', 'photoName', 'idFileName', 'epsFileName', 'plan', 'price',
@@ -77,7 +78,7 @@ export default {
     };
     const json = (obj, st) => new Response(JSON.stringify(obj), { status: st || 200, headers: Object.assign({ 'Content-Type': 'application/json' }, cors) });
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
-    if (req.method === 'GET') return json({ ok: true, mensaje: 'Intermediario Angels -> Kobo activo' });
+    if (req.method === 'GET') return json({ ok: true, mensaje: 'Intermediario Angels -> Kobo activo', version: WORKER_VERSION });
     if (req.method !== 'POST') return json({ ok: false, error: 'Método no permitido' }, 405);
     if (origen && origen !== env.ALLOWED_ORIGIN) return json({ ok: false, error: 'Origen no permitido' }, 403);
     try {
@@ -89,7 +90,7 @@ export default {
         const hint = rs.status === 404 ? 'Revisa KOBO_SUBMIT (usuario/servidor) y que el formulario esté implementado.' :
           (rs.status === 401 || rs.status === 403) ? 'Activa "Permitir envíos anónimos" en Kobo.' :
           rs.status === 400 ? 'El form_id o los campos no coinciden con el XLSForm.' : '';
-        return json({ ok: true, status: rs.status, body: rs.body, hint: hint });
+        return json({ ok: true, status: rs.status, body: rs.body, hint: hint, worker: WORKER_VERSION });
       }
       if (body.action !== 'ops') return json({ ok: false, error: 'Acción no válida' });
       const ops = (body.ops || []).slice(0, 40);

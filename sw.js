@@ -1,10 +1,13 @@
 /* Service worker – Club Angels Gymnastics
    Estrategia: red primero (para recibir actualizaciones) y caché como respaldo sin conexión.
    Las llamadas al intermediario (Worker) NO se interceptan. */
-const CACHE = 'angels-v3';
+try { importScripts('version.js'); } catch (e) {}
+const VER = (self.ANGELS_VERSION && self.ANGELS_VERSION.app) || '0';
+const CACHE = 'angels-' + VER;
 const ASSETS = [
   './',
   './index.html',
+  './version.js',
   './config.js',
   './sync.js',
   './manifest.webmanifest',
@@ -14,7 +17,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then(c => Promise.all(ASSETS.map(u => fetch(new Request(u, { cache: 'reload' })).then(r => r.ok ? c.put(u, r) : null).catch(() => null)))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
@@ -32,7 +35,7 @@ self.addEventListener('fetch', e => {
   if (url.origin !== self.location.origin) return; // Worker de Kobo, fuentes, etc.
 
   e.respondWith(
-    fetch(req)
+    fetch(req, { cache: 'no-store' })
       .then(res => {
         if (res && res.ok) {
           const copy = res.clone();

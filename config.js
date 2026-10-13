@@ -4,5 +4,5 @@
    La CLAVE de acceso NO va aquí: se escribe una sola vez en el celular desde el botón
    "Conexión", así no queda publicada en GitHub. */
 window.ANGELS_CONFIG = {
-  API_URL: "https://angels-kobo.oscaroviedo13.workers.dev/"
+  API_URL: "PEGAR_AQUI_LA_URL_DEL_WORKER"
 };

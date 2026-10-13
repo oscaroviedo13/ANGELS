@@ -56,5 +56,8 @@ En Kobo filtra por `tipo` y exporta a Excel/CSV; para el estado actual, toma el 
 - La hoja contiene datos de menores: protege la cuenta de Kobo (contraseña fuerte) y no compartas el proyecto de forma abierta.
 - Los envíos anónimos están habilitados en el formulario; la `CLAVE` protege solo el Worker. Si alguien conoce la URL de envío de Kobo podría enviar registros falsos: no la compartas.
 
-## Actualizaciones
-Cambia `CACHE = 'angels-v2'` a `angels-v3` en `sw.js` al subir cambios, para que los celulares tomen la nueva versión.
+## Versiones
+- La versión vigente está en **`version.js`** (única fuente). Se ve en la app bajo el estado de envío y en *Seguimiento*.
+- Historial en **`CHANGELOG.md`**. Para publicar una versión: `python3 bump.py 1.3.1 "qué cambió"` (actualiza `version.js`, el Worker y el historial), sube a GitHub y crea la etiqueta/Release `v1.3.1`.
+- Los celulares revisan cada 5 min si hay versión nueva y muestran el aviso **Actualizar**.
+- Si cambias `worker/worker.js`, pega el código también en Cloudflare (su versión sale en *Seguimiento → Probar conexión*).

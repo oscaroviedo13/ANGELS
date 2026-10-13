@@ -9,6 +9,8 @@
   var CFG = window.ANGELS_CONFIG || {};
   var K_KEY = 'angels_key', K_QUEUE = 'angels_queue', K_SNAP = 'angels_snap', K_LOG = 'angels_log', K_MODE = 'angels_mode';
   var MODE = 'kobo-1';
+  var VER = (self.ANGELS_VERSION && self.ANGELS_VERSION.app) || '?';
+  var VER_DATE = (self.ANGELS_VERSION && self.ANGELS_VERSION.fecha) || '';
 
   /* Migración única: restos de la versión anterior (Google Sheets) -> se descartan clave, cola y copia sincronizada,
      así los datos que ya están en el celular se reenvían a Kobo y la clave vieja no se reutiliza. */
@@ -167,6 +169,7 @@
     var hn = document.querySelector('.header-note'); if (!hn) return;
     hn.style.maxWidth = '340px';
     hn.innerHTML = '<div id="syncState" style="font-weight:700;font-size:12px"></div>' +
+      '<div id="appVer" style="font-size:11px;opacity:.8;margin-top:2px">Versión ' + VER + '</div>' +
       '<div class="actions" style="margin-top:6px;justify-content:flex-end">' +
       '<button class="gold" id="btnSync" type="button" style="padding:7px 10px;font-size:12px">Enviar a Kobo</button>' +
       '<button class="ghost" id="btnConn" type="button" style="padding:7px 10px;font-size:12px">Conexión</button>' +
@@ -190,7 +193,7 @@
       return '<div style="padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;color:' + (x.ok ? 'inherit' : 'var(--red)') + '">' +
         '<b>' + d.toLocaleString('es-CO') + '</b><br>' + escH(x.m) + '</div>';
     }).join('') : '<p class="muted">Aún no hay intentos de envío.</p>';
-    var html = '<p><b>Cola pendiente:</b> ' + queue.length + ' · <b>Conectado:</b> ' + (configured() ? 'sí' : 'no') + ' · <b>Versión:</b> ' + MODE + '</p>' +
+    var html = '<p><b>Versión de la app:</b> ' + VER + (VER_DATE ? ' (' + VER_DATE + ')' : '') + '<br><b>Cola pendiente:</b> ' + queue.length + ' · <b>Conectado:</b> ' + (configured() ? 'sí' : 'no') + '</p>' +
       '<p class="muted" style="word-break:break-all"><b>Worker:</b> ' + escH(CFG.API_URL || '(sin configurar)') + '</p>' +
       (result ? '<p style="font-weight:700;color:' + (result.ok ? 'var(--green,#1b7a4b)' : 'var(--red)') + '">' + escH(result.msg) + '</p>' : '') +
       '<div class="actions"><button class="primary" id="logTest" type="button">Probar conexión con Kobo</button>' +
@@ -205,7 +208,7 @@
       this.disabled = true; this.textContent = 'Probando…';
       call({ action: 'test' }).then(function (r) {
         var ok = r.status === 201 || r.status === 202 || r.status === 409;
-        logEv('Prueba: Kobo respondió ' + r.status + (r.body ? ' · ' + String(r.body).slice(0, 160) : ''), ok);
+        logEv('Prueba (app ' + VER + ' · worker ' + (r.worker || '?') + '): Kobo respondió ' + r.status + (r.body ? ' · ' + String(r.body).slice(0, 160) : ''), ok);
         openLog({ ok: ok, msg: ok ? '✔ Kobo recibió el envío de prueba (código ' + r.status + '). Búscalo en Datos con tipo = prueba.' : '✖ Kobo respondió ' + r.status + '. ' + (r.hint || '') });
       }).catch(function (e) {
         var m = e.code === 'clave' ? 'Clave incorrecta' : (e.name === 'TypeError' ? 'No se pudo contactar al Worker (URL o conexión)' : e.message);
@@ -231,6 +234,28 @@
     if (f) f.onclick = function () { localStorage.removeItem(K_KEY); closeModal(); setStatus('nokey'); };
   }
 
+  /* ---------- Detección de versión nueva ---------- */
+  function showUpdate(nv) {
+    if (document.getElementById('updBar')) return;
+    var d = document.createElement('div'); d.id = 'updBar';
+    d.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:99999;background:#142642;color:#fff;padding:12px 14px;border-radius:12px;display:flex;gap:10px;align-items:center;justify-content:space-between;box-shadow:0 6px 24px rgba(0,0,0,.35);font-size:14px';
+    d.innerHTML = '<span>Hay una versión nueva (' + nv + '). Tienes la ' + VER + '.</span><button id="updBtn" type="button" style="background:#e7c365;border:0;border-radius:8px;padding:8px 12px;font-weight:700">Actualizar</button>';
+    document.body.appendChild(d);
+    document.getElementById('updBtn').onclick = function () {
+      var t = [];
+      if (window.caches) t.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }));
+      if (navigator.serviceWorker) t.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }));
+      Promise.all(t).catch(function () {}).then(function () { logEv('Actualizado de ' + VER + ' a ' + nv); location.reload(); });
+    };
+  }
+  function checkVersion() {
+    if (!navigator.onLine) return;
+    fetch('version.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (t) {
+      var m = /app:\s*"([^"]+)"/.exec(t);
+      if (m && m[1] !== VER) showUpdate(m[1]);
+    }).catch(function () {});
+  }
+
   window.addEventListener('beforeinstallprompt', function (e) {
     e.preventDefault(); deferredInstall = e;
     var b = document.getElementById('btnInstall'); if (b) b.classList.remove('hidden');
@@ -246,6 +271,9 @@
   }
 
   buildUI();
+  checkVersion();
+  setInterval(checkVersion, 5 * 60 * 1000);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') checkVersion(); });
   setStatus(configured() ? (queue.length ? 'pending' : 'ok') : (urlOk() ? 'nokey' : 'local'));
   if (urlOk() && !getKey()) openConn(); else sync();
 })();
