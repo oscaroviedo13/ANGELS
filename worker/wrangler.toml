@@ -1,0 +1,9 @@
+name = "angels-kobo"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+KOBO_SUBMIT = "https://kc.kobotoolbox.org/TU_USUARIO_KOBO/submission"
+FORM_ID = "angels_registros"
+ALLOWED_ORIGIN = "https://oscaroviedo13.github.io"
+# La clave NO se pone aquí. Defínela como secreto:  npx wrangler secret put CLAVE

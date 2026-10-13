@@ -1,53 +1,60 @@
-# Club Angels Gymnastics – PWA de gestión
+# Club Angels Gymnastics – PWA de gestión (envío a KoboToolbox)
 
-App web instalable en Android (PWA). Hosting: **GitHub Pages**. Base de datos: **Google Sheets** a través de un **Google Apps Script** que actúa como API.
-
-> GitHub Pages solo sirve archivos estáticos (no ejecuta PHP). Por eso el "servidor" es el script de Google (código `.gs`, sintaxis JavaScript), gratis y sin hosting adicional.
+App web instalable en Android (PWA) en **GitHub Pages**. Los datos se guardan en el celular y se **envían a KoboToolbox**.
 
 ```
-index.html · config.js · sync.js · sw.js · manifest.webmanifest · icons/
-apps-script/Codigo.gs        ← se pega en Google Apps Script (NO es para GitHub)
-plantilla/Angels_BD.xlsx     ← plantilla de la base de datos (NO es para GitHub)
+GitHub Pages (app)  ──►  Cloudflare Worker (intermediario)  ──►  KoboToolbox
 ```
 
-## 1. Crear la base de datos en Google Sheets
-1. Entra a <https://drive.google.com> → **Nuevo → Subir archivo** → sube `plantilla/Angels_BD.xlsx`.
-2. Ábrelo con **Hojas de cálculo de Google** y, dentro, **Archivo → Guardar como hoja de cálculo de Google**.
-3. Verifica que existan las pestañas `Gimnastas`, `Pagos` y `Asistencia` (no cambies la fila 1).
+> KoboToolbox **no permite CORS** en sus servidores públicos: el navegador no puede enviarle datos directamente. Por eso el Worker (gratis) recibe lo que envía la app y lo reenvía a Kobo.
 
-## 2. Crear la API (Apps Script)
-1. En esa hoja: **Extensiones → Apps Script**.
-2. Borra el contenido y pega todo `apps-script/Codigo.gs`.
-3. Cambia `CLAVE = 'CAMBIA_ESTA_CLAVE'` por una clave larga propia (ej. 20+ caracteres).
-4. Selecciona la función **`configurar`** → **Ejecutar** → acepta los permisos.
-5. **Implementar → Nueva implementación → Tipo: Aplicación web**
-   - Ejecutar como: **Yo**
-   - Quién tiene acceso: **Cualquier usuario**
-6. Copia la **URL de la aplicación web** (termina en `/exec`).
+```
+index.html · config.js · sync.js · sw.js · manifest.webmanifest · icons/   ← van a GitHub
+worker/worker.js · worker/wrangler.toml                                    ← van a Cloudflare (no a GitHub Pages)
+kobo/Angels_Formulario_Kobo.xlsx                                           ← se sube a Kobo
+```
 
-> Si luego editas `Codigo.gs`, haz **Implementar → Administrar implementaciones → Editar → Nueva versión**; la URL se mantiene.
+## 1. Crear el formulario en Kobo
+1. En KoboToolbox: **Nuevo proyecto → Subir un XLSForm** → `kobo/Angels_Formulario_Kobo.xlsx`.
+2. **Implementar** el formulario.
+3. En **Configuración → Compartir**, activa **"Permitir envíos anónimos"** (el Worker envía sin usuario; la clave la controla el Worker).
+4. Anota tu **nombre de usuario de Kobo** y el servidor (`kc.kobotoolbox.org` o `kc-eu.kobotoolbox.org`).
 
-## 3. Publicar en GitHub
-1. Abre `config.js` y pega la URL en `API_URL`.
-2. Sube **el contenido** de esta carpeta (excepto `apps-script/` y `plantilla/`, que son opcionales) a la raíz del repositorio `ANGELS`.
-3. **Settings → Pages**: rama `main`, carpeta `/ (root)`.
-4. Sitio: <https://oscaroviedo13.github.io/ANGELS/>
+## 2. Crear el intermediario (Cloudflare Worker)
+1. Crea cuenta gratis en <https://dash.cloudflare.com> → **Workers & Pages → Create → Create Worker** (nombre `angels-kobo`) → **Deploy**.
+2. **Edit code**: borra todo, pega `worker/worker.js` y **Deploy**.
+3. **Settings → Variables and Secrets → Add**:
+   - `CLAVE` (tipo **Secret**): una clave larga propia, ej. `Angels-7kQ2xM9vLp4Rt8Zw`
+   - `KOBO_SUBMIT` (Text): `https://kc.kobotoolbox.org/TU_USUARIO_KOBO/submission`
+   - `FORM_ID` (Text): `angels_registros`
+   - `ALLOWED_ORIGIN` (Text): `https://oscaroviedo13.github.io`
+4. Copia la URL del Worker (`https://angels-kobo.TU-USUARIO.workers.dev`). Al abrirla en el navegador debe decir "Intermediario Angels -> Kobo activo".
 
-## 4. Instalar en Android
-1. Abre la URL en **Chrome** del celular.
-2. Pulsa **Conexión** y escribe la clave (la misma de `CLAVE`). Queda guardada solo en ese celular.
-3. Pulsa **Instalar app** (o menú ⋮ → *Instalar aplicación*).
+## 3. Publicar la app en GitHub
+1. En `config.js` pega la URL del Worker en `API_URL`.
+2. Sube a la raíz del repo `ANGELS` los archivos de la app (sin `worker/` ni `kobo/`). Reemplaza los anteriores y **borra** `apps-script/` y `plantilla/` si estaban.
+3. Espera 1–3 min a que Pages publique.
 
-## Cómo funciona
-- Sin internet: todo se guarda localmente y los cambios quedan en cola; al volver la conexión se envían solos.
-- El estado se ve en el encabezado (Sincronizado / Pendiente / Sin conexión). **Sincronizar** fuerza la actualización.
-- Cada sincronización descarga el estado de la hoja, así varios celulares ven los mismos datos.
-- Si dos personas editan **la misma ficha** a la vez, gana el último cambio enviado.
+## 4. Usar en Android
+1. Abre la URL en Chrome → **Conexión** → escribe la `CLAVE` → *Guardar y enviar*.
+2. **Instalar app**.
+3. Estado "● Enviado a Kobo" = al día. Sin internet los cambios quedan en cola.
 
-## Seguridad y privacidad
-- La hoja contiene datos de menores: no la compartas de forma abierta y activa verificación en dos pasos en la cuenta de Google.
-- La clave protege la API pero no está cifrada en tránsito más allá de HTTPS; es un control básico, no un sistema de usuarios.
-- Los archivos (foto, documento, EPS) **no** se guardan; igual que antes, se envían por WhatsApp.
+## Cómo quedan los datos en Kobo
+Cada acción es **un envío** (registro histórico). Columna `tipo`:
+- `gimnasta`: ficha completa. Cada vez que se edita llega **un envío nuevo**; la versión vigente es la **más reciente** por `id`.
+- `pago`: un pago (`pago_*`, `athleteId`).
+- `asistencia`: `athleteId` + `asist_date`.
+- `eliminar`: el gimnasta `athleteId` fue eliminado en la app.
+
+En Kobo filtra por `tipo` y exporta a Excel/CSV; para el estado actual, toma el último `registrado_en` por `id`.
+
+## Limitaciones (importante)
+- **Solo envío:** la app no descarga datos de Kobo. Cada celular muestra lo que tiene guardado localmente; dos celulares **no se ven entre sí**. Usa un solo celular principal, o trabaja con la consulta en Kobo.
+- **Borrar la copia local** deja la app vacía en ese celular (los datos siguen en Kobo). Usa "Exportar respaldo JSON" antes.
+- Los archivos (foto, documento, EPS) no se guardan; se envían por WhatsApp.
+- La hoja contiene datos de menores: protege la cuenta de Kobo (contraseña fuerte) y no compartas el proyecto de forma abierta.
+- Los envíos anónimos están habilitados en el formulario; la `CLAVE` protege solo el Worker. Si alguien conoce la URL de envío de Kobo podría enviar registros falsos: no la compartas.
 
 ## Actualizaciones
-Para forzar que los celulares tomen una nueva versión de la app, sube los archivos y cambia `CACHE = 'angels-v1'` a `angels-v2` en `sw.js`.
+Cambia `CACHE = 'angels-v2'` a `angels-v3` en `sw.js` al subir cambios, para que los celulares tomen la nueva versión.

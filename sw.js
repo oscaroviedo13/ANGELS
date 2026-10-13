@@ -1,7 +1,7 @@
 /* Service worker – Club Angels Gymnastics
    Estrategia: red primero (para recibir actualizaciones) y caché como respaldo sin conexión.
-   Las llamadas a Google (Apps Script) NO se interceptan. */
-const CACHE = 'angels-v1';
+   Las llamadas al intermediario (Worker) NO se interceptan. */
+const CACHE = 'angels-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -29,7 +29,7 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return; // Google Apps Script, fuentes, etc.
+  if (url.origin !== self.location.origin) return; // Worker de Kobo, fuentes, etc.
 
   e.respondWith(
     fetch(req)
