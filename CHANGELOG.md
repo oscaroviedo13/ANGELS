@@ -4,6 +4,12 @@ Formato: MAYOR.MENOR.PARCHE. La versión vigente está en `version.js` (se muest
 Al publicar: 1) cambia `app` y `fecha` en `version.js`, 2) añade una entrada aquí, 3) sube a GitHub, 4) crea la etiqueta/Release `vX.Y.Z`.
 Si cambias `worker/worker.js`, pega también el código en Cloudflare (su versión aparece en *Seguimiento → Probar conexión*).
 
+## 1.3.3 – 2026-10-13
+- FORM_ID del Worker = ID asignado por Kobo (aCfzo7vuit7qxwBBtf5ns7).
+
+## 1.3.2 – 2026-10-13
+- Worker con bloque CONFIG único (sin variables de Cloudflare salvo CLAVE) y página de diagnóstico ?diag=1; config.js ya trae la URL del Worker.
+
 ## 1.3.1 – 2026-10-13
 - Número de versión visible al final de la pantalla (pie de página).
 

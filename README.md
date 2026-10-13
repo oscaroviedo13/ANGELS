@@ -14,31 +14,19 @@ worker/worker.js · worker/wrangler.toml                                    ← 
 kobo/Angels_Formulario_Kobo.xlsx                                           ← se sube a Kobo
 ```
 
-## 1. Crear el formulario en Kobo
-1. En KoboToolbox: **Nuevo proyecto → Subir un XLSForm** → `kobo/Angels_Formulario_Kobo.xlsx`.
-2. **Implementar** el formulario.
-3. En **Configuración → Compartir**, activa **"Permitir envíos anónimos"** (el Worker envía sin usuario; la clave la controla el Worker).
-4. Anota tu **nombre de usuario de Kobo** y el servidor (`kc.kobotoolbox.org` o `kc-eu.kobotoolbox.org`).
+## Configuración completa (qué va en cada lugar)
 
-## 2. Crear el intermediario (Cloudflare Worker)
-1. Crea cuenta gratis en <https://dash.cloudflare.com> → **Workers & Pages → Create → Create Worker** (nombre `angels-kobo`) → **Deploy**.
-2. **Edit code**: borra todo, pega `worker/worker.js` y **Deploy**.
-3. **Settings → Variables and Secrets → Add**:
-   - `CLAVE` (tipo **Secret**): una clave larga propia, ej. `Angels-7kQ2xM9vLp4Rt8Zw`
-   - `KOBO_SUBMIT` (Text): `https://kc.kobotoolbox.org/TU_USUARIO_KOBO/submission`
-   - `FORM_ID` (Text): `angels_registros`
-   - `ALLOWED_ORIGIN` (Text): `https://oscaroviedo13.github.io`
-4. Copia la URL del Worker (`https://angels-kobo.TU-USUARIO.workers.dev`). Al abrirla en el navegador debe decir "Intermediario Angels -> Kobo activo".
+| Dónde | Qué | Valor |
+|---|---|---|
+| **Kobo** | Proyecto | Subir `kobo/Angels_Formulario_Kobo.xlsx` → **Implementar** |
+| **Kobo** | Compartir | Activar **Permitir envíos anónimos** |
+| **Cloudflare Worker** | Código | Pegar `worker/worker.js` completo (**Edit code → Deploy**) |
+| **Cloudflare Worker** | Bloque `CONFIG` (arriba del código) | `KOBO_USUARIO` = tu nombre de usuario de Kobo · `KOBO_SERVIDOR` = `kc.kobotoolbox.org` (o `kc-eu.kobotoolbox.org` si entras por eu.) · `FORM_ID` = `aCfzo7vuit7qxwBBtf5ns7` (el que Kobo muestra en `/formList`) · `ALLOWED_ORIGIN` = `https://oscaroviedo13.github.io` · `CLAVE_RESPALDO` = clave larga propia |
+| **Cloudflare Worker** | Variables (opcional) | Solo `CLAVE` (Secret) si prefieres no dejar la clave en el código. Las demás variables ya NO se usan |
+| **GitHub `config.js`** | `API_URL` | URL del Worker: `https://angels-kobo.oscaroviedo13.workers.dev` |
+| **Celular** | Botón *Conexión* | La misma clave del Worker |
 
-## 3. Publicar la app en GitHub
-1. En `config.js` pega la URL del Worker en `API_URL`.
-2. Sube a la raíz del repo `ANGELS` los archivos de la app (sin `worker/` ni `kobo/`). Reemplaza los anteriores y **borra** `apps-script/` y `plantilla/` si estaban.
-3. Espera 1–3 min a que Pages publique.
-
-## 4. Usar en Android
-1. Abre la URL en Chrome → **Conexión** → escribe la `CLAVE` → *Guardar y enviar*.
-2. **Instalar app**.
-3. Estado "● Enviado a Kobo" = al día. Sin internet los cambios quedan en cola.
+**Comprobar todo de una vez:** abre `https://angels-kobo.oscaroviedo13.workers.dev/?diag=1` en el navegador. Muestra el usuario/servidor/formulario que el Worker ve en Kobo y qué corregir (✔ / ✖). Debe decir "TODO CORRECTO".
 
 ## Cómo quedan los datos en Kobo
 Cada acción es **un envío** (registro histórico). Columna `tipo`:
